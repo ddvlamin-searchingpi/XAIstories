@@ -2,6 +2,20 @@
 
 This repository supportes the paper "Tell Me a Story! Narrative-Driven XAI with Large Language Models," which can be found at the following link: [Paper Link](https://arxiv.org/abs/2309.17057).
 
+## Installation
+
+Install from a local checkout:
+
+```bash
+pip install .
+```
+
+For editable development installs:
+
+```bash
+pip install -e .
+```
+
 ## Requirements
 
 To generate SHAPstories, the requirements must be installed.
