@@ -1,0 +1,19 @@
+{
+  "name": "xAI Stories",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "google.geminicodeassist",
+        "openai.chatgpt",
+        "codeium.codeium"
+      ]
+    }
+  },
+  "forwardPorts": [8888]
+}
