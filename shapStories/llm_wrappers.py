@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
-from openai import OpenAI
-import google.generativeai as genai
+# from openai import OpenAI
+from google import genai
+from google.genai import types
 import replicate
 
-from transformers import AutoTokenizer, AutoModelForCausalLM
+# from transformers import AutoTokenizer, AutoModelForCausalLM
+
 
 class LLMWrapper(ABC):
     @abstractmethod
@@ -15,6 +17,7 @@ class LLMWrapper(ABC):
         :return: The generated response as a string.
         """
         pass
+
 
 class GptApi(LLMWrapper):
 
@@ -31,21 +34,22 @@ class GptApi(LLMWrapper):
                 {"role": "user", "content": prompt}
             ]
         )
-        
+
         return completion.choices[0].message.content
-    
+
+
 class GeminiAPI(LLMWrapper):
 
-    def __init__(self, api_key, model="gemini-pro"):
+    def __init__(self, api_key, model):
         self.model = model
-        genai.configure(api_key=api_key)
-        self.client = genai.GenerativeModel(model)
+        self.client = genai.Client(api_key=api_key)
 
     def generate_response(self, prompt):
-
-        return self.client.generate_content(prompt).text
+        return self.client.models.generate_content(model=self.model, contents=prompt).text
 
 # Not advised to use
+
+
 class HfGemma(LLMWrapper):
 
     def __init__(self):
@@ -57,6 +61,7 @@ class HfGemma(LLMWrapper):
 
         outputs = self.model.generate(**input_ids, max_new_tokens=max_tokens)
         print(self.tokenizer.decode(outputs[0]))
+
 
 class LlamaAPI():
     def __init__(self, api_key, model="meta/meta-llama-3-70b-instruct"):
@@ -81,4 +86,4 @@ class LlamaAPI():
         response_text = ""
         for item in output:
             response_text += str(item)
-        return response_text 
+        return response_text
