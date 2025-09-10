@@ -30,7 +30,7 @@ class SHAPstory():
     else:
       # TODO update
       explainer = shap.KernelExplainer(model.predict, x)
-      shap_vals = explainer.shap_values(x).T
+      shap_vals = explainer.shap_values(x)
 
     shap_df = pd.DataFrame(shap_vals, columns=[f"{col} SHAP Value" for col in x.columns], index=x.index)
 
