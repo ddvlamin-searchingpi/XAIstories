@@ -1,4 +1,6 @@
-FROM mcr.microsoft.com/devcontainers/python:3.11
+FROM mcr.microsoft.com/devcontainers/python:3.13
+
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # Copy requirements.txt
 COPY requirements.txt .

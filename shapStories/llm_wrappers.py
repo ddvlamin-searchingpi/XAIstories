@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from google import genai
 from google.genai import types
 import replicate
+import requests
 
 # from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -47,6 +48,25 @@ class GeminiAPI(LLMWrapper):
     def generate_response(self, prompt):
         return self.client.models.generate_content(model=self.model, contents=prompt).text
 
+
+class OllamaWrapper(LLMWrapper):
+
+    def __init__(self, model):
+        self.model = model
+
+    def generate_response(self, prompt):
+        api_endpoint = "http://localhost:11434/api/generate"
+        headers = {"Content-Type": "application/json"}
+        data = {"prompt": prompt, "temperature": 0.1, "stream": False, "model": self.model}
+        response = requests.post(api_endpoint, headers=headers, json=data)
+        if response.status_code != 200:
+            raise Exception(f"Failed to generate response: {response.text}")
+        response_json = response.json()
+        if response_json.get("done_reason") != "stop":
+            raise Exception(f"Generation did not stop: {response_json}")
+
+        return response_json["response"]
+        
 # Not advised to use
 
 
