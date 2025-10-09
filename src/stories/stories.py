@@ -44,6 +44,18 @@ def is_tree(est):
     # ensembles expose base estimators through `estimators_`
     return hasattr(est, "estimators_") and all(isinstance(e, BaseDecisionTree) for e in est.estimators_)
 
+def is_pipeline(est):
+    return isinstance(est, Pipeline)
+
+def get_feature_scaler(est, name_scaler = "scaler"):
+  if is_pipeline(est):
+    return est.named_steps[name_scaler]
+  else:
+    return None
+  
+def has_feature_scaler(est, name_scaler = "scaler"):
+  return get_feature_scaler(est, name_scaler) is not None
+
 class SHAPstory():
 
   def __init__(self, model, explainer, llm, feature_desc, task_description, 
@@ -62,13 +74,17 @@ class SHAPstory():
     self.llm = llm
     self.explainer = explainer
     self.model = model
+    self.estimator = unwrap(self.model)
 
     self.class_descriptions_str = ""
     for class_label, class_desc in class_descriptions.items():
       self.class_descriptions_str += f"- class label {class_label} represents the {class_desc}\n"
 
   def gen_shap_feature_df(self, x):
-    
+    if is_pipeline(self.model):
+       transformed_x = self.model[:-1].transform(x)
+       x = pd.DataFrame(transformed_x, columns=x.columns, index=x.index)
+
     shap_vals = self.explainer.shap_values(x)
     if len(shap_vals.shape) == 3: #model had multiple outputs
        if shap_vals.shape[2] == 2:
@@ -136,11 +152,14 @@ class SHAPstory():
       "Shap value"    : shap_values
     })
     include_coefficient = False
-    if is_linear(self.model) and hasattr(self.model, "coef_"):
-      row_df["Model coefficient"] = self.model.coef_[0]
+    if is_linear(self.estimator) and hasattr(self.estimator, "coef_"):
+      row_df["Model coefficient"] = self.estimator.coef_[0]
       include_coefficient = True
 
-    sorted_row_df = row_df.sort_values(by="Shap value", ascending=False)
+    sorted_row_df = row_df.sort_values(
+       by="Shap value", 
+       key=lambda s: s.abs(), 
+       ascending=False)
 
     prompt_string = f"""
 An AI model was used to {self.task_description}. 
@@ -171,10 +190,10 @@ features outside of the story. Conclude with a short summary of why this
 classification may have occurred. Limit your answer to 8 sentences.
 
 Table containing feature values and SHAP values{" and model coefficients" if include_coefficient is not None else ""}:
-{sorted_row_df.to_string()}
+{sorted_row_df.to_string(index=False)}
 
 Additional clarification of the features:
-{self.feature_desc}
+{self.feature_desc.to_string(index=False)}
     """
     
     return prompt_string
@@ -199,63 +218,9 @@ Additional clarification of the features:
         A list containing the generated SHAPstories for each instance.
     """
 
+
     shap_df, predictions_df = self.gen_variables(x)
 
     stories = [self.generate_response(self.generate_prompt(x, predictions_df, shap_df, i)) for i in range(len(x))]
 
     return stories
-  
-  def generate_stories_and_waterfall(self,model,x,y, full_x):
-     
-     shap_df, predictions_df = self.gen_variables(model, x, y, tree=True)
-
-     stories = [self.generate_response(self.generate_prompt(
-         x, predictions_df, shap_df, i)) for i in range(len(x))]
-     plots = self.plot_shap_waterfall_to_array(shap_df, model, full_x)
-
-     return stories, plots
-
-  # Added for the compairson between SHAPstories and waterfall plots
-  def plot_shap_waterfall_to_array(self, shap_feature_df, model, full_x):
-      """
-      Creates SHAP waterfall plots for each instance in the DataFrame using precomputed SHAP values,
-      dynamically adjusting the base (expected) value based on the predicted class,
-      and stores them as image arrays. Assumes a SKLearn random forest classifier being used for
-      binary classification.
-      """
-      image_arrays = []
-      num_instances = shap_feature_df.shape[0]
-
-      feature_names = [col for col in shap_feature_df.columns if not "SHAP Value" in col]
-
-      predicted_probs = model.predict_proba(full_x)
-
-      expected_value = np.mean(predicted_probs[:, 1])
-      print(expected_value)
-
-      shap_columns = [col for col in shap_feature_df.columns if "SHAP Value" in col]
-
-      # Iterate over each data instance and create a waterfall plot
-      for i in range(num_instances):
-          shap_values = shap_feature_df.iloc[i][shap_columns].values
-
-          # Create a SHAP Explanation object manually
-          explanation = shap.Explanation(values=shap_values,
-                                        base_values=expected_value,
-                                        data=full_x.iloc[i].values,
-                                        feature_names=feature_names)
-
-          plt.figure(figsize=(10, 5))
-          shap.plots.waterfall(explanation, show=False)
-
-          # Save plot to a buffer
-          buf = io.BytesIO()
-          plt.savefig(buf, format="png", bbox_inches='tight')  # Use bbox_inches to prevent cut-off
-          plt.close()
-          buf.seek(0)
-          img = Image.open(buf)
-          image_array = np.array(img)
-          image_arrays.append(image_array)
-
-          buf.close()
-      return image_arrays

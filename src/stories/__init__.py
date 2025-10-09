@@ -12,6 +12,6 @@ __all__ = [
     "llm_wrappers",
 ]
 
-from .stories import SHAPstory
+from .stories import SHAPstory, unwrap
 
 
