@@ -12,5 +12,6 @@ __all__ = [
     "llm_wrappers",
 ]
 
-__version__ = "0.1.0"
+from .stories import SHAPstory
+
 
