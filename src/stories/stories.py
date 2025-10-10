@@ -47,38 +47,36 @@ def is_tree(est):
 def is_pipeline(est):
     return isinstance(est, Pipeline)
 
-def get_feature_scaler(est, name_scaler = "scaler"):
-  if is_pipeline(est):
-    return est.named_steps[name_scaler]
-  else:
-    return None
-  
-def has_feature_scaler(est, name_scaler = "scaler"):
-  return get_feature_scaler(est, name_scaler) is not None
-
 class SHAPstory():
 
-  def __init__(self, model, explainer, llm, feature_desc, task_description, 
-               input_description, class_descriptions):
-    """Initializes the SHAPstory class with necessary parameters."""
-    if not task_description.startswith("predict"):
-       raise Exception("Task description must begin with 'predict'")
-    for _, class_desc in class_descriptions.items():
-       if not class_desc.startswith(f"class"):
-          raise Exception("Class descriptions must begin with 'class'")
-
-    self.feature_desc = feature_desc
-    self.task_description = task_description
-    self.input_description = input_description
-    self.class_descriptions = class_descriptions
+  def __init__(self, model, explainer, llm, prompt_template, feature_desc, max_story_features=50,
+               only_positive_shaps=False, include_linear_model_coefficients=False):
+    """Initializes the SHAPstory class with necessary parameters.
+    
+    Arguments:
+    ----------
+    model : object
+        A trained model which supports SHAP explanations.
+    explainer : object
+        A trained explainer object from SHAP.
+    llm : object
+        An instance of the LLMWrapper class.
+    prompt_template : str
+        Prompt string with placeholders for predicted_label, predicted_score, shap_df, feature_desc
+    """
     self.llm = llm
     self.explainer = explainer
     self.model = model
+    self.max_story_features = max_story_features
+    self.only_positive_shaps = only_positive_shaps
+    self.include_linear_model_coefficients = include_linear_model_coefficients
+    self.prompt_template = prompt_template
+
+    #unwrap the estimator from the grid_search and/or pipeline wrapper
+    #if the wrapped model is linear, the shap values can be generated using the linear explainer instead of a more generic one
     self.estimator = unwrap(self.model)
 
-    self.class_descriptions_str = ""
-    for class_label, class_desc in class_descriptions.items():
-      self.class_descriptions_str += f"- class label {class_label} represents the {class_desc}\n"
+    self.feature_desc = feature_desc.set_index("Feature name")
 
   def gen_shap_feature_df(self, x):
     if is_pipeline(self.model):
@@ -126,7 +124,7 @@ class SHAPstory():
 
     return shap_feature_df, predictions_df
 
-  def generate_prompt(self, x, predictions_df, shap_df, iloc_pos):
+  def generate_prompt(self, x: pd.Series, prediction, score, shap_values):
     """
     Generates the prompt for the provided LLM to generate a narrative.
     
@@ -140,11 +138,8 @@ class SHAPstory():
     str
         The generated prompt.
     """
-
-    prediction, score = predictions_df.iloc[iloc_pos].values
-    shap_values = shap_df.iloc[iloc_pos].values
-    feature_values = x.iloc[iloc_pos].values
-    feature_names = shap_df.columns
+    feature_values = list(x.values)
+    feature_names = list(x.index)
 
     row_df = pd.DataFrame({
       "Feature name" : feature_names,
@@ -152,49 +147,31 @@ class SHAPstory():
       "Shap value"    : shap_values
     })
     include_coefficient = False
-    if is_linear(self.estimator) and hasattr(self.estimator, "coef_"):
+    if is_linear(self.estimator) and hasattr(self.estimator, "coef_") and self.include_linear_model_coefficients:
       row_df["Model coefficient"] = self.estimator.coef_[0]
       include_coefficient = True
+
+    #only take features with positive shap values
+    if self.only_positive_shaps:
+      row_df = row_df[row_df["Shap value"] > 0]
 
     sorted_row_df = row_df.sort_values(
        by="Shap value", 
        key=lambda s: s.abs(), 
        ascending=False)
 
-    prompt_string = f"""
-An AI model was used to {self.task_description}. 
-The input features to the model include data about {self.input_description}. 
-The target variable represents one of the following classes:
-{self.class_descriptions_str}
-The AI model predicted a certain instance of the dataset to belong to the class with label {int(prediction)} 
-(i.e. {self.class_descriptions[prediction]}) with probability {score:.2%}. 
+    #only take the top self.max_story_features features
+    sorted_row_df = sorted_row_df.head(self.max_story_features)
 
-The provided SHAP table was generated to explain this
-outcome. It includes every feature along with its value for that instance, and the
-SHAP value assigned to it. 
+    #sort and select rows in self.feature_desc the same way
+    new_feature_desc = self.feature_desc.reindex(sorted_row_df["Feature name"])
 
-The goal of SHAP is to explain the prediction of an instance by 
-computing the contribution of each feature to the prediction. The
-SHAP explanation method computes Shapley values from coalitional game
-theory. The feature values of a data instance act as players in a coalition.
-Shapley values tell us how to fairly distribute the “payout” (= the prediction)
-among the features. A player can be an individual feature value, e.g. for tabular
-data. The scores in the table are sorted from most positive to most negative.
-
-Can you come up with a plausible, fluent story as to why the model could have
-predicted this outcome, based on the most influential positive and most influential
-negative SHAP values? Focus on the features with the highest absolute
-SHAP values. Try to explain the most important feature values in this story, as
-well as potential interactions that fit the story. No need to enumerate individual
-features outside of the story. Conclude with a short summary of why this
-classification may have occurred. Limit your answer to 8 sentences.
-
-Table containing feature values and SHAP values{" and model coefficients" if include_coefficient is not None else ""}:
-{sorted_row_df.to_string(index=False)}
-
-Additional clarification of the features:
-{self.feature_desc.to_string(index=False)}
-    """
+    prompt_string = self.prompt_template.format(
+      predicted_label = int(prediction),
+      predicted_score = format(score, ".2f"),
+      shap_df = sorted_row_df.to_string(index=False),
+      feature_desc = new_feature_desc.to_string(index=True),
+    )
     
     return prompt_string
 
@@ -217,10 +194,18 @@ Additional clarification of the features:
     list of str
         A list containing the generated SHAPstories for each instance.
     """
-
-
     shap_df, predictions_df = self.gen_variables(x)
 
-    stories = [self.generate_response(self.generate_prompt(x, predictions_df, shap_df, i)) for i in range(len(x))]
+    stories = []
+    for i in range(len(x)):
+      x_values = x.iloc[i]
+      shap_values = shap_df.iloc[i].values
+      prediction, score = predictions_df.iloc[i].values
+
+      prompt = self.generate_prompt(x_values, prediction, score, shap_values)
+
+      story = self.generate_response(prompt)
+
+      stories.append(story)
 
     return stories
