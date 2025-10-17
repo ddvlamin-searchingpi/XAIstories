@@ -1,0 +1,9 @@
+FROM llama3.1:8b
+
+PARAMETER temperature 0
+PARAMETER top_k 1
+PARAMETER top_p 0
+PARAMETER mirostat 0
+PARAMETER mirostat_tau 0
+PARAMETER mirostat_eta 0
+PARAMETER seed 42

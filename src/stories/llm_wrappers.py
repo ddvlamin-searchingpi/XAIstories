@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from google import genai
+import json
 import requests
 
 class LLMWrapper(ABC):
@@ -47,4 +48,26 @@ class OllamaWrapper(LLMWrapper):
             raise Exception(f"Generation did not stop: {response_json}")
 
         return response_json["response"]
+    
+    def generate_json_response(self, prompt):
+        api_endpoint = f"http://{self.host}:{self.port}/api/generate"
+        headers = {"Content-Type": "application/json"}
+        data = {
+            "prompt": prompt, 
+            "temperature": self.temperature, 
+            "stream": False, 
+            "model": self.model,
+            "format": "json"
+        }
+        response = requests.post(api_endpoint, headers=headers, json=data)
+        if response.status_code != 200:
+            raise Exception(f"Failed to generate response: {response.text}")
+        response_json = response.json()
+        if response_json.get("done_reason") != "stop":
+            raise Exception(f"Generation did not stop: {response_json}")
+
+        try:
+            return json.loads(response_json["response"])
+        except json.decoder.JSONDecodeError:
+            raise Exception(f"Failed to parse response: {response_json['response']}")
         
