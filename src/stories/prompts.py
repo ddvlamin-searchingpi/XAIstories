@@ -49,10 +49,10 @@ The target variable represents one of the following classes:
 
 The LLM returned the following narrative: {narrative}
 
-The prompt also included the following table with the feature names, descriptions and more:
+The prompt also included the following table with the feature names and descriptions:
 {feature_desc}
 
-Your task is to extract {evaluation_metric_description}
+Your task is to extract {evaluation_task_description}
 
 Make sure to use the exact names of the features as provided in the table, including capitalization.
 """
@@ -68,36 +68,13 @@ def make_rank_evaluation_prompt(task_description, input_description, class_descr
     for class_label, class_desc in class_descriptions.items():
       class_descriptions_str += f"- class label {class_label} represents the {class_desc}\n"
 
-    evaluation_metric_description = """a rank for each feature indicating the importance and order of their occurence in the narrative. Please just provide the JSON dictionary and add nothing else to the answer. Example {{"0": "feature_name", "1": "feature_name", "2": "feature_name"}}."""
+    evaluation_task_description = """a rank for each feature indicating the importance and order of their occurence in the narrative. Please just provide the JSON dictionary and add nothing else to the answer. Example {{"0": "feature_name", "1": "feature_name", "2": "feature_name"}}."""
 
     return evaluation_prompt_template.format(
         task_description=task_description, 
         input_description=input_description, 
         class_descriptions_str=class_descriptions_str,
         narrative=narrative,
-        evaluation_metric_description=evaluation_metric_description,
-        feature_desc=feature_desc
-    )
-
-
-def make_rank_evaluation_prompt(task_description, input_description, class_descriptions, narrative, feature_desc):
-    if not task_description.startswith("predict"):
-        raise Exception("Task description must begin with 'predict'")
-    for _, class_desc in class_descriptions.items():
-        if not class_desc.startswith(f"class"):
-            raise Exception("Class descriptions must begin with 'class'")
-
-    class_descriptions_str = ""
-    for class_label, class_desc in class_descriptions.items():
-      class_descriptions_str += f"- class label {class_label} represents the {class_desc}\n"
-
-    evaluation_metric_description = """a rank for each feature indicating the order of their occurence in the narrative. Please just provide the JSON dictionary and add nothing else to the answer. Example {{"0": "feature_name", "1": "feature_name", "2": "feature_name"}}."""
-
-    return evaluation_prompt_template.format(
-        task_description=task_description,
-        input_description=input_description,
-        class_descriptions_str=class_descriptions_str,
-        narrative=narrative,
-        evaluation_metric_description=evaluation_metric_description,
+        evaluation_task_description=evaluation_task_description,
         feature_desc=feature_desc
     )
