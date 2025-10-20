@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from google import genai
 import json
 import requests
+import pandas as pd
 
 class LLMWrapper(ABC):
     def __init__(self, temperature=0.1) -> None:
@@ -49,7 +50,7 @@ class OllamaWrapper(LLMWrapper):
 
         return response_json["response"]
     
-    def generate_json_response(self, prompt):
+    def generate_response_as_json(self, prompt):
         api_endpoint = f"http://{self.host}:{self.port}/api/generate"
         headers = {"Content-Type": "application/json"}
         data = {
@@ -70,4 +71,9 @@ class OllamaWrapper(LLMWrapper):
             return json.loads(response_json["response"])
         except json.decoder.JSONDecodeError:
             raise Exception(f"Failed to parse response: {response_json['response']}")
+        
+    def generate_response_as_dataframe(self, prompt, columns):
+        json_response = self.generate_response_as_json(prompt)
+        return pd.DataFrame(json_response.items(), columns=columns)
+
         
