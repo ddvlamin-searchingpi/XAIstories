@@ -40,12 +40,17 @@ class ShapExplainer:
         X = _transform_input(self.model, X)
 
         shap_vals = self.explainer.shap_values(X)
-        if len(shap_vals.shape) == 3: #model had multiple outputs
-            if shap_vals.shape[2] == 2:
-                shap_vals = shap_vals[:,:,1]
-            else:
-                raise Exception("SHAP explanations for stories are not available for a model with more than 2 outputs")
-        
+        # model had multiple outputs, select the shape values corresponding to the predicted class
+        if len(shap_vals.shape) == 3:
+            selected_shap_vals = shap_vals[:,:,0]
+            predictions = self.get_predictions(X)["class"].values
+            for c in self.model.classes_[1:]:
+                mask = predictions == c
+                selected_shap_vals[mask] = shap_vals[mask, :, c]
+            shap_vals = selected_shap_vals
+        else: #shap value is with respect to target class, i.e. the last class in model.classes_
+            pass
+
         shap_df = pd.DataFrame(shap_vals, columns=X.columns, index=X.index)
 
         return shap_df
@@ -65,6 +70,7 @@ class ShapExplainer:
         predictions_df = pd.DataFrame({
             "class"  : y_pred,
             "probability" : y_scores,
+            "target_probability": class_probabilities[:, -1]
         })
 
         return predictions_df

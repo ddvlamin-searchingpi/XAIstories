@@ -28,7 +28,7 @@ def make_shap_narrative_prompt(task_description, input_description, class_descri
 
     shap_explanation = """The goal of SHAP is to explain the prediction of an instance by computing the contribution of each feature to the prediction. Each individual SHAP value is a measure of how much additional probability this feature adds or subtracts  in the predicted probability relative to the base level probability. This relative nature of the SHAP values might have unexpected consequences that you are to take into account. For example, features that should intuitively contribute in a positive way (and vice versa), can still have negative SHAP values if their value is below an average in the dataset.
 
-The provided feature attribution table was generated to explain the predicted class of the instance. It includes every feature along with its value for that instance, the average feature value in the dataset and the SHAP value assigned to it.
+The provided feature attribution table is generated to explain why the instance is predicted to be or not be of the target class 1. It includes every feature along with its value for that instance, the SHAP value assigned to it etc.
     """
 
     return narrative_prompt_template.format_map(Partial(
