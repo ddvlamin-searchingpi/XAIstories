@@ -2,6 +2,7 @@ import pandas as pd
 import shap
 import numpy as np
 from typing import Iterable, Optional
+import logging
 
 from stories.utils import get_estimator, is_pipeline, is_linear, get_pipe
 
@@ -17,7 +18,8 @@ def _transform_input(model, X: pd.DataFrame):
         pass
     return X
 
-def make_linear_interventional_shap_explainer(model, X: pd.DataFrame, max_story_features=None, only_positive_shaps=None):
+
+def make_linear_interventional_shap_explainer(model, X: pd.DataFrame, max_story_features=20, only_positive_shaps=False):
     #average of original feature values
     feature_means = X.mean().to_frame().T
 
@@ -28,8 +30,20 @@ def make_linear_interventional_shap_explainer(model, X: pd.DataFrame, max_story_
     explainer = shap.LinearExplainer(estimator, masker=masker)
     return ShapExplainer(model, explainer, feature_means, max_story_features, only_positive_shaps)
 
+
+def make_tree_interventional_shap_explainer(model, X: pd.DataFrame, max_story_features = 20, only_positive_shaps=False):
+    # average of original feature values
+    feature_means = X.mean().to_frame().T
+
+    X = _transform_input(model, X)
+
+    estimator = get_estimator(model)
+    masker = shap.maskers.Independent(X)
+    explainer = shap.LinearExplainer(estimator, masker=masker)
+    return ShapExplainer(model, explainer, feature_means, max_story_features, only_positive_shaps)
+
 class ShapExplainer:
-    def __init__(self, model, explainer, feature_means: Optional[pd.DataFrame] = None, max_story_features=None, only_positive_shaps=None):
+    def __init__(self, model, explainer, feature_means: Optional[pd.DataFrame] = None, max_story_features=20, only_positive_shaps=False):
         self.max_story_features = max_story_features
         self.only_positive_shaps = only_positive_shaps
         self.feature_means = feature_means
@@ -37,19 +51,22 @@ class ShapExplainer:
         self.explainer = explainer
 
     def get_explanations(self, X: pd.DataFrame) -> pd.DataFrame:
+        predictions = self.get_predictions(X)["class"].values
         X = _transform_input(self.model, X)
-
         shap_vals = self.explainer.shap_values(X)
+
         # model had multiple outputs, select the shape values corresponding to the predicted class
         if len(shap_vals.shape) == 3:
             selected_shap_vals = shap_vals[:,:,0]
-            predictions = self.get_predictions(X)["class"].values
             for c in self.model.classes_[1:]:
                 mask = predictions == c
                 selected_shap_vals[mask] = shap_vals[mask, :, c]
             shap_vals = selected_shap_vals
         else: #shap value is with respect to target class, i.e. the last class in model.classes_
-            pass
+            if not isinstance(self.explainer, shap.LinearExplainer):
+                logging.warning("Reversing sign for shap values of negative class")
+            mask = predictions == 0
+            shap_vals[mask] = -shap_vals[mask]
 
         shap_df = pd.DataFrame(shap_vals, columns=X.columns, index=X.index)
 

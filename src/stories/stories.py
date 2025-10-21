@@ -53,13 +53,13 @@ class SHAPstory():
     stories = []
     for i in range(len(X)):
       x_values = X.iloc[i]
-      _, _, target_probability = predictions_df.iloc[i].values
+      predicted_class, class_probability, _ = predictions_df.iloc[i].values
       explanation_table = self.explainer.make_explanation_table(x_values)
       explanation_table = explanation_table.merge(self.feature_desc, how="left", on="Feature name")
 
       prompt = self.generate_prompt(
-          self.explainer.model.classes_[-1], 
-          target_probability,
+          predicted_class, 
+          class_probability,
           explanation_table[self.feature_attribution_table_columns]
       )
 
