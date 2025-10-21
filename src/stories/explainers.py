@@ -39,7 +39,7 @@ def make_tree_interventional_shap_explainer(model, X: pd.DataFrame, max_story_fe
 
     estimator = get_estimator(model)
     masker = shap.maskers.Independent(X)
-    explainer = shap.TreeExplainer(estimator, masker=masker)
+    explainer = shap.TreeExplainer(estimator, data=X, feature_perturbation="interventional", model_output="predict_proba")
     return ShapExplainer(model, explainer, feature_means, max_story_features, only_positive_shaps)
 
 class ShapExplainer:
